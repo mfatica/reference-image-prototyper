@@ -28,6 +28,14 @@
         <textarea id="text" rows="4" maxlength="4000" placeholder="e.g. an ice tower: a crystal on a stone plinth, three iron claws"></textarea>
       </label>
 
+      <fieldset class="pieces">
+        <legend class="label">Add to the prompt</legend>
+        <label class="check"><input type="checkbox" id="piece-rules">
+          <span><b>Reference image rules</b><span class="hint">One object, transparent background, straight-on front view, flat lighting: what the tower lab asks for.</span></span></label>
+        <label class="check"><input type="checkbox" id="piece-look">
+          <span><b>Grammar Ghouls look</b><span class="hint">The family prompt's style: dark-fantasy stone, iron and brass, one glow. It overrides some keywords.</span></span></label>
+      </fieldset>
+
       <details class="preview" open>
         <summary>Prompt sent to OpenAI</summary>
         <pre id="prompt-preview" class="prompt"></pre>
@@ -55,8 +63,8 @@
         </label>
         <label class="field small"><span class="label">Background</span>
           <select id="background">
-            <option value="auto">Auto</option>
             <option value="transparent">Transparent</option>
+            <option value="auto">Auto</option>
             <option value="opaque">Opaque</option>
           </select>
         </label>

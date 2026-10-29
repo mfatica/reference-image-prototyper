@@ -1,9 +1,9 @@
-import { CATEGORIES, composePrompt, decodeState, encodeState } from "./prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, composePrompt, decodeState, encodeState } from "./prompt.js";
 import { generateImages } from "./api.js";
 import { openHistory } from "./store.js";
 
 const DEFAULT_MODEL = "gpt-image-2.5-flare";
-const KEYS = { apiKey: "rp.apiKey", model: "rp.model", options: "rp.options" };
+const KEYS = { apiKey: "rp.apiKey", model: "rp.model", options: "rp.options.v2" };
 const OPTION_IDS = ["size", "quality", "n", "background"];
 
 const $ = (id) => document.getElementById(id);
@@ -59,12 +59,16 @@ function formState() {
     const value = $(`cat-${c.id}`).value;
     if (value) selections[c.id] = value;
   }
-  return { text: $("text").value, selections };
+  const pieces = { rules: $("piece-rules").checked, look: $("piece-look").checked };
+  return { text: $("text").value, selections, pieces };
 }
 
 function applyState(state) {
   for (const c of CATEGORIES) $(`cat-${c.id}`).value = state.selections[c.id] || "";
   $("text").value = state.text || "";
+  const pieces = state.pieces || DEFAULT_PIECES; // history from before the pieces has none
+  $("piece-rules").checked = pieces.rules;
+  $("piece-look").checked = pieces.look;
   onFormChange();
 }
 
@@ -92,7 +96,7 @@ function shareUrl(state) {
 
 function onFormChange() {
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text);
+  const prompt = composePrompt(state.selections, state.text, state.pieces);
   $("prompt-preview").textContent = prompt || "Pick a keyword or write a description.";
   $("prompt-preview").classList.toggle("empty", !prompt);
   if (!running) $("generate").disabled = !prompt;
@@ -147,7 +151,7 @@ async function onGenerate(event) {
     return;
   }
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text);
+  const prompt = composePrompt(state.selections, state.text, state.pieces);
   if (!prompt) return;
   const options = formOptions();
   const settings = { ...options, model: model() };
@@ -209,6 +213,9 @@ function card(entry) {
     const value = entry.state.selections[c.id];
     if (value) chips.append(el("span", { className: "chip", title: c.label, textContent: value }));
   }
+  const used = entry.state.pieces || { rules: false, look: false };
+  if (used.rules) chips.append(el("span", { className: "chip piece", textContent: "Reference rules" }));
+  if (used.look) chips.append(el("span", { className: "chip piece", textContent: "Grammar Ghouls look" }));
   const s = entry.settings;
   const meta = el("p", { className: "meta",
     textContent: `${new Date(entry.createdAt).toLocaleString()} · ${s.size} · ${s.quality} · ${s.model}` });
@@ -276,13 +283,12 @@ async function main() {
     /* keep the defaults */
   }
   const shared = decodeState(new URLSearchParams(location.hash.slice(1)).get("s"));
-  if (shared) applyState(shared);
-  else onFormChange();
+  applyState(shared || { text: "", selections: {}, pieces: DEFAULT_PIECES });
 
   $("form").addEventListener("input", onFormChange);
   $("form").addEventListener("change", () => writeLocal(KEYS.options, JSON.stringify(formOptions())));
   $("form").addEventListener("submit", onGenerate);
-  $("reset").onclick = () => applyState({ text: "", selections: {} });
+  $("reset").onclick = () => applyState({ text: "", selections: {}, pieces: DEFAULT_PIECES });
   $("copy-link").onclick = () => copy(shareUrl(formState()), "Link");
   $("open-settings").onclick = openSettings;
   $("settings").addEventListener("close", onSettingsClose);

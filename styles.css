@@ -131,3 +131,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .6); }
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; transition: opacity .2s, transform .2s;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.pieces { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0; }
+.pieces legend { padding: 0; margin-bottom: 6px; }
+.check { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; cursor: pointer; }
+.check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--ice); }
+.check b { font-weight: 600; display: block; }
+.chip.piece { color: var(--gold); border-color: #5a4c37; background: rgba(216, 185, 138, .07); }

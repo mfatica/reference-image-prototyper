@@ -21,6 +21,25 @@ export const CATEGORIES = [
 
 export const MAX_TEXT = 4000;
 
+// The pieces the tower lab puts around a subject (reference-model skill): the Grammar Ghouls family prompt's look
+// (its first two paragraphs), and the reference rules (its last paragraph plus the lab's image requirements).
+
+export const LOOK = `Stylized dark-fantasy 3D game asset, inspired by Warcraft III and classic gothic fantasy. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
+
+Show exactly one complete tower standing upright on its own small integrated stone base, with clear separation between all parts and sharp details.`;
+
+export const REFERENCE_RULES = `This is a single-object modeling reference, not concept art or a scene illustration. Geometry must be physically plausible, with clearly defined solid forms and distinct components that could be reconstructed as a 3D mesh. Avoid excessive surface detail, thin floating decorations, transparent materials, particle effects, dramatic perspective, and cinematic lighting. No characters, no text, no labels, no watermarks.
+
+Image requirements (for turning the image into a 3D model):
+- One object only, shown whole and centred, with a small empty margin on every side; nothing cut off by the frame.
+- Fully transparent background, saved as a PNG. No ground, floor, shadow, scenery, text, border or watermark.
+- Straight-on front view at eye level: the object faces the camera squarely, the camera level with its middle, not looking down from above or turned to one side. Little perspective, as if shot with a long lens.
+- Flat, even lighting: no cast shadows, no strong highlights, no rim light, no fog or glow haze around the object.
+- Glowing parts in one solid, saturated colour that appears nowhere else on the object.
+- Square image, at least 1024 x 1024 pixels.`;
+
+export const DEFAULT_PIECES = { rules: true, look: false };
+
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
 
 /** Only the selections that name a known category and one of its options. */
@@ -33,15 +52,29 @@ function cleanSelections(selections) {
   return clean;
 }
 
-/** The user's text first, then one "Category: keyword." line per chosen keyword, in category order. */
-export function composePrompt(selections, text) {
+/**
+ * The prompt: [look] [subject] [keywords] [reference rules], blocks separated by a blank line.
+ * Empty when there is neither text nor a keyword: the pieces alone describe nothing.
+ * With a piece on, the text is labelled "Subject:" as the lab does.
+ */
+export function composePrompt(selections, text, pieces = {}) {
   const clean = cleanSelections(selections);
   const lines = CATEGORIES.filter((c) => clean[c.id]).map((c) => `${c.label}: ${clean[c.id].toLowerCase()}.`);
-  const parts = [];
   const body = (text || "").trim();
-  if (body) parts.push(body);
+  if (!body && !lines.length) return "";
+  const labelled = pieces.look || pieces.rules;
+  const parts = [];
+  if (pieces.look) parts.push(LOOK);
+  if (body) parts.push(labelled ? `Subject: ${body}` : body);
   if (lines.length) parts.push(lines.join("\n"));
+  if (pieces.rules) parts.push(REFERENCE_RULES);
   return parts.join("\n\n");
+}
+
+function cleanPieces(raw) {
+  const pieces = { ...DEFAULT_PIECES };
+  for (const key of Object.keys(DEFAULT_PIECES)) if (raw && typeof raw[key] === "boolean") pieces[key] = raw[key];
+  return pieces;
 }
 
 function toBase64Url(str) {
@@ -56,18 +89,18 @@ function fromBase64Url(code) {
   return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
 }
 
-/** A URL-safe code for the form: {text, selections}. */
-export function encodeState({ text, selections }) {
-  return toBase64Url(JSON.stringify({ t: text || "", k: cleanSelections(selections) }));
+/** A URL-safe code for the form: {text, selections, pieces}. */
+export function encodeState({ text, selections, pieces }) {
+  return toBase64Url(JSON.stringify({ t: text || "", k: cleanSelections(selections), p: cleanPieces(pieces) }));
 }
 
-/** The form from a share code, cleaned; null when the code is damaged. */
+/** The form from a share code, cleaned (links from before the pieces get the defaults); null when damaged. */
 export function decodeState(code) {
   if (!code) return null;
   try {
     const raw = JSON.parse(fromBase64Url(code));
     const text = typeof raw.t === "string" ? raw.t.slice(0, MAX_TEXT) : "";
-    return { text, selections: cleanSelections(raw.k) };
+    return { text, selections: cleanSelections(raw.k), pieces: cleanPieces(raw.p) };
   } catch {
     return null;
   }
