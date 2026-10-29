@@ -59,7 +59,7 @@ function formState() {
     const value = $(`cat-${c.id}`).value;
     if (value) selections[c.id] = value;
   }
-  const pieces = { rules: $("piece-rules").checked, look: $("piece-look").checked };
+  const pieces = { rules: $("piece-rules").checked };
   return { text: $("text").value, selections, pieces };
 }
 
@@ -68,7 +68,6 @@ function applyState(state) {
   $("text").value = state.text || "";
   const pieces = state.pieces || DEFAULT_PIECES; // history from before the pieces has none
   $("piece-rules").checked = pieces.rules;
-  $("piece-look").checked = pieces.look;
   onFormChange();
 }
 
@@ -213,9 +212,8 @@ function card(entry) {
     const value = entry.state.selections[c.id];
     if (value) chips.append(el("span", { className: "chip", title: c.label, textContent: value }));
   }
-  const used = entry.state.pieces || { rules: false, look: false };
+  const used = entry.state.pieces || { rules: false };
   if (used.rules) chips.append(el("span", { className: "chip piece", textContent: "Reference rules" }));
-  if (used.look) chips.append(el("span", { className: "chip piece", textContent: "Grammar Ghouls look" }));
   const s = entry.settings;
   const meta = el("p", { className: "meta",
     textContent: `${new Date(entry.createdAt).toLocaleString()} · ${s.size} · ${s.quality} · ${s.model}` });

@@ -21,10 +21,9 @@ export const CATEGORIES = [
 
 export const MAX_TEXT = 4000;
 
-// The pieces the tower lab puts around a subject (reference-model skill): the Grammar Ghouls family prompt's look
-// (its first two paragraphs), and the reference rules (its last paragraph plus the lab's image requirements).
+// The reference rules switch adds two blocks around the subject: STYLE before it and REFERENCE_RULES after it.
 
-export const LOOK = `Stylized dark-fantasy 3D game asset, inspired by Warcraft III and classic gothic fantasy. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
+export const STYLE = `Stylized dark-fantasy 3D game asset, inspired by classic gothic fantasy. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
 
 Show exactly one complete tower standing upright on its own small integrated stone base, with clear separation between all parts and sharp details.`;
 
@@ -38,7 +37,7 @@ Image requirements (for turning the image into a 3D model):
 - Glowing parts in one solid, saturated colour that appears nowhere else on the object.
 - Square image, at least 1024 x 1024 pixels.`;
 
-export const DEFAULT_PIECES = { rules: true, look: false };
+export const DEFAULT_PIECES = { rules: true };
 
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
 
@@ -53,19 +52,18 @@ function cleanSelections(selections) {
 }
 
 /**
- * The prompt: [look] [subject] [keywords] [reference rules], blocks separated by a blank line.
- * Empty when there is neither text nor a keyword: the pieces alone describe nothing.
- * With a piece on, the text is labelled "Subject:" as the lab does.
+ * The prompt: [style] [subject] [keywords] [reference rules], blocks separated by a blank line; style and rules only
+ * with the rules switch on, and then the text is labelled "Subject:".
+ * Empty when there is neither text nor a keyword: the rules alone describe nothing.
  */
 export function composePrompt(selections, text, pieces = {}) {
   const clean = cleanSelections(selections);
   const lines = CATEGORIES.filter((c) => clean[c.id]).map((c) => `${c.label}: ${clean[c.id].toLowerCase()}.`);
   const body = (text || "").trim();
   if (!body && !lines.length) return "";
-  const labelled = pieces.look || pieces.rules;
   const parts = [];
-  if (pieces.look) parts.push(LOOK);
-  if (body) parts.push(labelled ? `Subject: ${body}` : body);
+  if (pieces.rules) parts.push(STYLE);
+  if (body) parts.push(pieces.rules ? `Subject: ${body}` : body);
   if (lines.length) parts.push(lines.join("\n"));
   if (pieces.rules) parts.push(REFERENCE_RULES);
   return parts.join("\n\n");
@@ -94,7 +92,7 @@ export function encodeState({ text, selections, pieces }) {
   return toBase64Url(JSON.stringify({ t: text || "", k: cleanSelections(selections), p: cleanPieces(pieces) }));
 }
 
-/** The form from a share code, cleaned (links from before the pieces get the defaults); null when damaged. */
+/** The form from a share code, cleaned (missing switches get the defaults, unknown ones are dropped); null when damaged. */
 export function decodeState(code) {
   if (!code) return null;
   try {

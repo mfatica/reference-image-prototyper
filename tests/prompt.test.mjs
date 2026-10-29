@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORIES, DEFAULT_PIECES, LOOK, REFERENCE_RULES, composePrompt, encodeState, decodeState } from "../js/prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState } from "../js/prompt.js";
 
 test("there are eight categories with eight options each", () => {
   assert.equal(CATEGORIES.length, 8);
@@ -30,7 +30,7 @@ test("unknown categories and options are ignored", () => {
 });
 
 test("a state survives a round trip through a share code", () => {
-  const state = { text: "a frost obelisk — with ünïcode", selections: { shape: "Chunky", lighting: "Cold atmosphere" }, pieces: { rules: true, look: false } };
+  const state = { text: "a frost obelisk — with ünïcode", selections: { shape: "Chunky", lighting: "Cold atmosphere" }, pieces: { rules: true } };
   assert.deepEqual(decodeState(encodeState(state)), state);
 });
 
@@ -54,37 +54,44 @@ test("decoding caps very long text", () => {
   assert.equal(decodeState(code).text.length, 4000);
 });
 
-// ---------------------------------------------------------------- prompt pieces (reference rules, Grammar Ghouls look)
+// ---------------------------------------------------------------- reference rules (style paragraph + rules)
 
-test("the reference rules come last and say it is a modeling reference", () => {
-  const prompt = composePrompt({ shape: "Chunky" }, "an ice tower", { rules: true });
-  assert.ok(prompt.startsWith("Subject: an ice tower\n\nShape language: chunky."), prompt);
-  assert.match(prompt, /not concept art or a scene illustration/);
-  assert.match(prompt, /Fully transparent background/);
+test("with the rules on, the style comes first and the rules last", () => {
+  const prompt = composePrompt({ shading: "Cel-shaded" }, "an ice tower", { rules: true });
+  const order = [STYLE, "Subject: an ice tower", "Shading: cel-shaded.", REFERENCE_RULES].map((part) => prompt.indexOf(part));
+  assert.ok(order.every((at) => at >= 0), "every part is present");
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.ok(prompt.endsWith(REFERENCE_RULES), "rules are the last block");
 });
 
-test("the look comes first, then the subject, the keywords and the rules", () => {
-  const prompt = composePrompt({ shading: "Cel-shaded" }, "an ice tower", { rules: true, look: true });
-  const order = [LOOK, "Subject: an ice tower", "Shading: cel-shaded.", REFERENCE_RULES].map((part) => prompt.indexOf(part));
-  assert.ok(order.every((at) => at >= 0), "every part is present");
-  assert.deepEqual([...order].sort((a, b) => a - b), order);
+test("the rules say it is a modeling reference on a transparent background", () => {
+  assert.match(REFERENCE_RULES, /not concept art or a scene illustration/);
+  assert.match(REFERENCE_RULES, /Fully transparent background/);
 });
 
-test("the pieces alone, without text or keywords, compose nothing", () => {
-  assert.equal(composePrompt({}, " ", { rules: true, look: true }), "");
+test("the prompt text names no other game", () => {
+  for (const text of [STYLE, REFERENCE_RULES]) assert.doesNotMatch(text, /warcraft/i);
 });
 
-test("without pieces the text is not labelled as a subject", () => {
-  assert.equal(composePrompt({}, "an ice tower", { rules: false, look: false }), "an ice tower");
+test("the rules alone, without text or keywords, compose nothing", () => {
+  assert.equal(composePrompt({}, " ", { rules: true }), "");
 });
 
-test("the pieces survive a share code", () => {
-  const state = { text: "x", selections: {}, pieces: { rules: false, look: true } };
+test("with the rules off the text is not labelled as a subject", () => {
+  assert.equal(composePrompt({}, "an ice tower", { rules: false }), "an ice tower");
+});
+
+test("the rules switch survives a share code", () => {
+  const state = { text: "x", selections: {}, pieces: { rules: false } };
   assert.deepEqual(decodeState(encodeState(state)), state);
 });
 
-test("a share code from before the pieces opens with the default pieces", () => {
+test("a share code from before the switch opens with the default", () => {
   const old = Buffer.from(JSON.stringify({ t: "x", k: {} })).toString("base64url");
   assert.deepEqual(decodeState(old).pieces, DEFAULT_PIECES);
+});
+
+test("a share code with the old look switch keeps only the rules switch", () => {
+  const old = Buffer.from(JSON.stringify({ t: "x", k: {}, p: { rules: false, look: true } })).toString("base64url");
+  assert.deepEqual(decodeState(old).pieces, { rules: false });
 });
