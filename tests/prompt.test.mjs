@@ -176,3 +176,7 @@ test("decoding caps a very long reference prompt", () => {
   const code = encodeState({ text: "x", selections: {}, reference: { style: "s".repeat(20000), rules: "r" } });
   assert.equal(decodeState(code).reference.style.length, MAX_REFERENCE);
 });
+
+test("the style leaves the materials to the subject and keywords", () => {
+  assert.doesNotMatch(STYLE, /Materials:|iron|brass|graveyard stone/i);
+});
