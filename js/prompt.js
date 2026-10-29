@@ -103,3 +103,8 @@ export function decodeState(code) {
     return null;
   }
 }
+
+/** The form to open with: a share link's code first, then the form this browser saved, else an empty form. */
+export function startState(sharedCode, savedCode) {
+  return decodeState(sharedCode) || decodeState(savedCode) || { text: "", selections: {}, pieces: { ...DEFAULT_PIECES } };
+}

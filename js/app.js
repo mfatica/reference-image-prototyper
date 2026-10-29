@@ -1,9 +1,9 @@
-import { CATEGORIES, DEFAULT_PIECES, composePrompt, decodeState, encodeState } from "./prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, composePrompt, encodeState, startState } from "./prompt.js";
 import { generateImages } from "./api.js";
 import { openHistory } from "./store.js";
 
 const DEFAULT_MODEL = "gpt-image-2.5-flare";
-const KEYS = { apiKey: "rp.apiKey", model: "rp.model", options: "rp.options.v2" };
+const KEYS = { apiKey: "rp.apiKey", model: "rp.model", options: "rp.options.v2", form: "rp.form" };
 const OPTION_IDS = ["size", "quality", "n", "background"];
 
 const $ = (id) => document.getElementById(id);
@@ -99,7 +99,9 @@ function onFormChange() {
   $("prompt-preview").textContent = prompt || "Pick a keyword or write a description.";
   $("prompt-preview").classList.toggle("empty", !prompt);
   if (!running) $("generate").disabled = !prompt;
-  history.replaceState(null, "", `#s=${encodeState(state)}`);
+  const code = encodeState(state);
+  history.replaceState(null, "", `#s=${code}`);
+  writeLocal(KEYS.form, code);
 }
 
 // ---------------------------------------------------------------- feedback
@@ -280,8 +282,7 @@ async function main() {
   } catch {
     /* keep the defaults */
   }
-  const shared = decodeState(new URLSearchParams(location.hash.slice(1)).get("s"));
-  applyState(shared || { text: "", selections: {}, pieces: DEFAULT_PIECES });
+  applyState(startState(new URLSearchParams(location.hash.slice(1)).get("s"), readLocal(KEYS.form, "")));
 
   $("form").addEventListener("input", onFormChange);
   $("form").addEventListener("change", () => writeLocal(KEYS.options, JSON.stringify(formOptions())));

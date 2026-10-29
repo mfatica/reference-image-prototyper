@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORIES, DEFAULT_PIECES, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState } from "../js/prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState, startState } from "../js/prompt.js";
 
 test("there are eight categories with eight options each", () => {
   assert.equal(CATEGORIES.length, 8);
@@ -95,4 +95,25 @@ test("a share code from before the switch opens with the default", () => {
 test("a share code with the old look switch keeps only the rules switch", () => {
   const old = Buffer.from(JSON.stringify({ t: "x", k: {}, p: { rules: false, look: true } })).toString("base64url");
   assert.deepEqual(decodeState(old).pieces, { rules: false });
+});
+
+// ---------------------------------------------------------------- the form at start
+
+test("a share link wins over the saved form", () => {
+  const shared = encodeState({ text: "shared", selections: {} });
+  const saved = encodeState({ text: "saved", selections: {} });
+  assert.equal(startState(shared, saved).text, "shared");
+});
+
+test("without a share link the saved form comes back", () => {
+  const saved = encodeState({ text: "saved", selections: { shape: "Chunky" }, pieces: { rules: false } });
+  assert.deepEqual(startState("", saved), { text: "saved", selections: { shape: "Chunky" }, pieces: { rules: false } });
+});
+
+test("a damaged share link falls back to the saved form", () => {
+  assert.equal(startState("%%%", encodeState({ text: "saved", selections: {} })).text, "saved");
+});
+
+test("with nothing saved the form starts empty with the default switch", () => {
+  assert.deepEqual(startState(null, null), { text: "", selections: {}, pieces: DEFAULT_PIECES });
 });
