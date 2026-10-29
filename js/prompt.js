@@ -23,7 +23,7 @@ export const MAX_TEXT = 4000;
 
 // The reference rules switch adds two blocks around the subject: STYLE before it and REFERENCE_RULES after it.
 
-export const STYLE = `Stylized dark-fantasy 3D game asset, inspired by classic gothic fantasy. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
+export const STYLE = `Stylized dark-fantasy 3D game asset in the general style of Warcraft and Diablo, with a classic gothic fantasy feel. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
 
 Show exactly one complete tower standing upright on its own small integrated stone base, with clear separation between all parts and sharp details.`;
 

@@ -69,8 +69,9 @@ test("the rules say it is a modeling reference on a transparent background", () 
   assert.match(REFERENCE_RULES, /Fully transparent background/);
 });
 
-test("the prompt text names no other game", () => {
-  for (const text of [STYLE, REFERENCE_RULES]) assert.doesNotMatch(text, /warcraft/i);
+test("the style names Warcraft and Diablo as a general style, not a single game", () => {
+  assert.match(STYLE, /general style of Warcraft and Diablo/);
+  assert.doesNotMatch(STYLE, /Warcraft III/);
 });
 
 test("the rules alone, without text or keywords, compose nothing", () => {
