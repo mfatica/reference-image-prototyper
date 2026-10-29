@@ -1,4 +1,4 @@
-import { CATEGORIES, DEFAULT_PIECES, composePrompt, encodeState, startState } from "./prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, cleanReference, composePrompt, encodeState, startState } from "./prompt.js";
 import { generateImages } from "./api.js";
 import { openHistory } from "./store.js";
 
@@ -40,6 +40,8 @@ const model = () => readLocal(KEYS.model, "") || DEFAULT_MODEL;
 
 // ---------------------------------------------------------------- form
 
+let reference = null; // the edited reference prompt {style, rules}, or null for the default
+
 function buildCategories() {
   const box = $("categories");
   for (const c of CATEGORIES) {
@@ -60,7 +62,7 @@ function formState() {
     if (value) selections[c.id] = value;
   }
   const pieces = { rules: $("piece-rules").checked };
-  return { text: $("text").value, selections, pieces };
+  return { text: $("text").value, selections, pieces, reference };
 }
 
 function applyState(state) {
@@ -68,6 +70,8 @@ function applyState(state) {
   $("text").value = state.text || "";
   const pieces = state.pieces || DEFAULT_PIECES; // history from before the pieces has none
   $("piece-rules").checked = pieces.rules;
+  reference = state.reference || null;
+  showReferenceState();
   onFormChange();
 }
 
@@ -95,7 +99,7 @@ function shareUrl(state) {
 
 function onFormChange() {
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text, state.pieces);
+  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference);
   $("prompt-preview").textContent = prompt || "Pick a keyword or write a description.";
   $("prompt-preview").classList.toggle("empty", !prompt);
   if (!running) $("generate").disabled = !prompt;
@@ -152,7 +156,7 @@ async function onGenerate(event) {
     return;
   }
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text, state.pieces);
+  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference);
   if (!prompt) return;
   const options = formOptions();
   const settings = { ...options, model: model() };
@@ -215,7 +219,10 @@ function card(entry) {
     if (value) chips.append(el("span", { className: "chip", title: c.label, textContent: value }));
   }
   const used = entry.state.pieces || { rules: false };
-  if (used.rules) chips.append(el("span", { className: "chip piece", textContent: "Reference rules" }));
+  if (used.rules) {
+    const label = entry.state.reference ? "Reference rules (edited)" : "Reference rules";
+    chips.append(el("span", { className: "chip piece", textContent: label }));
+  }
   const s = entry.settings;
   const meta = el("p", { className: "meta",
     textContent: `${new Date(entry.createdAt).toLocaleString()} · ${s.size} · ${s.quality} · ${s.model}` });
@@ -255,6 +262,36 @@ async function renderResults() {
   }
 }
 
+// ---------------------------------------------------------------- reference prompt
+
+function showReferenceState() {
+  $("reference-state").textContent = reference ? "Edited" : "Default";
+  $("reset-reference").disabled = !reference;
+}
+
+function openReferenceEditor() {
+  const current = reference || DEFAULT_REFERENCE;
+  $("ref-style").value = current.style;
+  $("ref-rules").value = current.rules;
+  $("reference-dialog").showModal();
+}
+
+function onReferenceEditorClose() {
+  if ($("reference-dialog").returnValue !== "save") return;
+  reference = cleanReference({ style: $("ref-style").value, rules: $("ref-rules").value });
+  showReferenceState();
+  onFormChange();
+  toast(reference ? "Reference prompt saved" : "Reference prompt is the default");
+}
+
+function resetReference() {
+  if (!window.confirm("Put the default reference prompt back? Your edits will be lost.")) return;
+  reference = null;
+  showReferenceState();
+  onFormChange();
+  toast("Default reference prompt restored");
+}
+
 // ---------------------------------------------------------------- settings dialog
 
 function openSettings() {
@@ -290,6 +327,9 @@ async function main() {
   $("reset").onclick = () => applyState({ text: "", selections: {}, pieces: DEFAULT_PIECES });
   $("copy-link").onclick = () => copy(shareUrl(formState()), "Link");
   $("open-settings").onclick = openSettings;
+  $("edit-reference").onclick = openReferenceEditor;
+  $("reset-reference").onclick = resetReference;
+  $("reference-dialog").addEventListener("close", onReferenceEditorClose);
   $("settings").addEventListener("close", onSettingsClose);
   $("forget-key").onclick = () => {
     writeLocal(KEYS.apiKey, "");

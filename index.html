@@ -32,6 +32,11 @@
         <legend class="label">Add to the prompt</legend>
         <label class="check"><input type="checkbox" id="piece-rules">
           <span><b>Reference image rules</b><span class="hint">A dark-fantasy stone, iron and brass tower with one glow, as a modeling reference: one whole object on an empty background, straight-on front view. Leaves the look to your keywords.</span></span></label>
+        <div class="ref-tools">
+          <button type="button" class="ghost small" id="edit-reference">Edit</button>
+          <button type="button" class="ghost small" id="reset-reference">Reset</button>
+          <span class="note" id="reference-state"></span>
+        </div>
       </fieldset>
 
       <details class="preview" open>
@@ -96,6 +101,23 @@
       <div class="actions">
         <button type="submit" class="primary" value="save">Save</button>
         <button type="button" class="ghost" id="forget-key">Forget key</button>
+        <button type="submit" class="ghost" value="cancel" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reference-dialog">
+    <form method="dialog" class="dialog-body">
+      <h2>Reference prompt</h2>
+      <label class="field"><span class="label">Before your subject</span>
+        <textarea id="ref-style" rows="7" maxlength="8000" spellcheck="false"></textarea>
+      </label>
+      <label class="field"><span class="label">After your keywords</span>
+        <textarea id="ref-rules" rows="10" maxlength="8000" spellcheck="false"></textarea>
+      </label>
+      <p class="note">Saved in this browser and included in copied links. Empty a box to leave that part out; Reset puts the default back.</p>
+      <div class="actions">
+        <button type="submit" class="primary" value="save">Save</button>
         <button type="submit" class="ghost" value="cancel" formnovalidate>Cancel</button>
       </div>
     </form>

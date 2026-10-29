@@ -39,6 +39,10 @@ Image requirements (for turning the image into a 3D model):
 
 export const DEFAULT_PIECES = { rules: true };
 
+/** The reference prompt's two parts as the editor shows them; a form's `reference: null` means these. */
+export const DEFAULT_REFERENCE = { style: STYLE, rules: REFERENCE_RULES };
+export const MAX_REFERENCE = 8000;
+
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
 
 /** Only the selections that name a known category and one of its options. */
@@ -52,20 +56,22 @@ function cleanSelections(selections) {
 }
 
 /**
- * The prompt: [style] [subject] [keywords] [reference rules], blocks separated by a blank line; style and rules only
- * with the rules switch on, and then the text is labelled "Subject:".
+ * The prompt: [style] [subject] [keywords] [rules], blocks separated by a blank line; style and rules only with the
+ * rules switch on, and then the text is labelled "Subject:". `reference` is an edited {style, rules}, or null for the
+ * defaults; an emptied part is left out.
  * Empty when there is neither text nor a keyword: the rules alone describe nothing.
  */
-export function composePrompt(selections, text, pieces = {}) {
+export function composePrompt(selections, text, pieces = {}, reference = null) {
   const clean = cleanSelections(selections);
   const lines = CATEGORIES.filter((c) => clean[c.id]).map((c) => `${c.label}: ${clean[c.id].toLowerCase()}.`);
   const body = (text || "").trim();
   if (!body && !lines.length) return "";
+  const { style, rules } = reference || DEFAULT_REFERENCE;
   const parts = [];
-  if (pieces.rules) parts.push(STYLE);
+  if (pieces.rules && style.trim()) parts.push(style.trim());
   if (body) parts.push(pieces.rules ? `Subject: ${body}` : body);
   if (lines.length) parts.push(lines.join("\n"));
-  if (pieces.rules) parts.push(REFERENCE_RULES);
+  if (pieces.rules && rules.trim()) parts.push(rules.trim());
   return parts.join("\n\n");
 }
 
@@ -73,6 +79,14 @@ function cleanPieces(raw) {
   const pieces = { ...DEFAULT_PIECES };
   for (const key of Object.keys(DEFAULT_PIECES)) if (raw && typeof raw[key] === "boolean") pieces[key] = raw[key];
   return pieces;
+}
+
+/** An edited reference prompt, or null when it is missing, damaged or the same as the default. */
+export function cleanReference(raw) {
+  if (!raw || typeof raw.style !== "string" || typeof raw.rules !== "string") return null;
+  const reference = { style: raw.style.slice(0, MAX_REFERENCE), rules: raw.rules.slice(0, MAX_REFERENCE) };
+  const isDefault = reference.style === DEFAULT_REFERENCE.style && reference.rules === DEFAULT_REFERENCE.rules;
+  return isDefault ? null : reference;
 }
 
 function toBase64Url(str) {
@@ -87,9 +101,12 @@ function fromBase64Url(code) {
   return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (ch) => ch.charCodeAt(0)));
 }
 
-/** A URL-safe code for the form: {text, selections, pieces}. */
-export function encodeState({ text, selections, pieces }) {
-  return toBase64Url(JSON.stringify({ t: text || "", k: cleanSelections(selections), p: cleanPieces(pieces) }));
+/** A URL-safe code for the form: {text, selections, pieces, reference}; a default reference prompt is left out. */
+export function encodeState({ text, selections, pieces, reference }) {
+  const raw = { t: text || "", k: cleanSelections(selections), p: cleanPieces(pieces) };
+  const edited = cleanReference(reference);
+  if (edited) raw.r = { s: edited.style, r: edited.rules };
+  return toBase64Url(JSON.stringify(raw));
 }
 
 /** The form from a share code, cleaned (missing switches get the defaults, unknown ones are dropped); null when damaged. */
@@ -98,7 +115,8 @@ export function decodeState(code) {
   try {
     const raw = JSON.parse(fromBase64Url(code));
     const text = typeof raw.t === "string" ? raw.t.slice(0, MAX_TEXT) : "";
-    return { text, selections: cleanSelections(raw.k), pieces: cleanPieces(raw.p) };
+    const reference = raw.r ? cleanReference({ style: raw.r.s, rules: raw.r.r }) : null;
+    return { text, selections: cleanSelections(raw.k), pieces: cleanPieces(raw.p), reference };
   } catch {
     return null;
   }
@@ -106,5 +124,5 @@ export function decodeState(code) {
 
 /** The form to open with: a share link's code first, then the form this browser saved, else an empty form. */
 export function startState(sharedCode, savedCode) {
-  return decodeState(sharedCode) || decodeState(savedCode) || { text: "", selections: {}, pieces: { ...DEFAULT_PIECES } };
+  return decodeState(sharedCode) || decodeState(savedCode) || { text: "", selections: {}, pieces: { ...DEFAULT_PIECES }, reference: null };
 }

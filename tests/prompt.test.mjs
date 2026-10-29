@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORIES, DEFAULT_PIECES, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState, startState } from "../js/prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, MAX_REFERENCE, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState, startState } from "../js/prompt.js";
 
 test("there are eight categories with eight options each", () => {
   assert.equal(CATEGORIES.length, 8);
@@ -30,7 +30,7 @@ test("unknown categories and options are ignored", () => {
 });
 
 test("a state survives a round trip through a share code", () => {
-  const state = { text: "a frost obelisk — with ünïcode", selections: { shape: "Chunky", lighting: "Cold atmosphere" }, pieces: { rules: true } };
+  const state = { text: "a frost obelisk — with ünïcode", selections: { shape: "Chunky", lighting: "Cold atmosphere" }, pieces: { rules: true }, reference: null };
   assert.deepEqual(decodeState(encodeState(state)), state);
 });
 
@@ -41,7 +41,7 @@ test("a share code is safe in a URL", () => {
 
 test("decoding drops unknown categories and options", () => {
   const code = encodeState({ text: "x", selections: { shape: "Chunky", shading: "Wobbly", nope: "Chunky" } });
-  assert.deepEqual(decodeState(code), { text: "x", selections: { shape: "Chunky" }, pieces: DEFAULT_PIECES });
+  assert.deepEqual(decodeState(code), { text: "x", selections: { shape: "Chunky" }, pieces: DEFAULT_PIECES, reference: null });
 });
 
 test("a damaged share code decodes to null", () => {
@@ -103,7 +103,7 @@ test("with the rules off the text is not labelled as a subject", () => {
 });
 
 test("the rules switch survives a share code", () => {
-  const state = { text: "x", selections: {}, pieces: { rules: false } };
+  const state = { text: "x", selections: {}, pieces: { rules: false }, reference: null };
   assert.deepEqual(decodeState(encodeState(state)), state);
 });
 
@@ -127,7 +127,7 @@ test("a share link wins over the saved form", () => {
 
 test("without a share link the saved form comes back", () => {
   const saved = encodeState({ text: "saved", selections: { shape: "Chunky" }, pieces: { rules: false } });
-  assert.deepEqual(startState("", saved), { text: "saved", selections: { shape: "Chunky" }, pieces: { rules: false } });
+  assert.deepEqual(startState("", saved), { text: "saved", selections: { shape: "Chunky" }, pieces: { rules: false }, reference: null });
 });
 
 test("a damaged share link falls back to the saved form", () => {
@@ -135,5 +135,44 @@ test("a damaged share link falls back to the saved form", () => {
 });
 
 test("with nothing saved the form starts empty with the default switch", () => {
-  assert.deepEqual(startState(null, null), { text: "", selections: {}, pieces: DEFAULT_PIECES });
+  assert.deepEqual(startState(null, null), { text: "", selections: {}, pieces: DEFAULT_PIECES, reference: null });
+});
+
+// ---------------------------------------------------------------- an edited reference prompt
+
+test("an edited reference prompt replaces the default, in the same places", () => {
+  const reference = { style: "A tidy wizard tower.", rules: "One object, white background." };
+  const prompt = composePrompt({ shape: "Chunky" }, "an ice tower", { rules: true }, reference);
+  assert.equal(prompt, "A tidy wizard tower.\n\nSubject: an ice tower\n\nShape language: chunky.\n\nOne object, white background.");
+});
+
+test("an emptied part of the reference prompt is left out", () => {
+  const prompt = composePrompt({}, "an ice tower", { rules: true }, { style: "  ", rules: "Rules." });
+  assert.equal(prompt, "Subject: an ice tower\n\nRules.");
+});
+
+test("with the rules off an edited reference prompt is not used", () => {
+  assert.equal(composePrompt({}, "an ice tower", { rules: false }, { style: "S", rules: "R" }), "an ice tower");
+});
+
+test("an edited reference prompt survives a share code", () => {
+  const state = { text: "x", selections: {}, pieces: { rules: true }, reference: { style: "S", rules: "R" } };
+  assert.deepEqual(decodeState(encodeState(state)), state);
+});
+
+test("the default reference prompt is not put in share codes", () => {
+  const plain = encodeState({ text: "x", selections: {} });
+  const same = encodeState({ text: "x", selections: {}, reference: { ...DEFAULT_REFERENCE } });
+  assert.equal(same, plain);
+  assert.equal(decodeState(same).reference, null);
+});
+
+test("a damaged reference in a share code falls back to the default", () => {
+  const code = Buffer.from(JSON.stringify({ t: "x", k: {}, r: { s: 5, r: ["no"] } })).toString("base64url");
+  assert.equal(decodeState(code).reference, null);
+});
+
+test("decoding caps a very long reference prompt", () => {
+  const code = encodeState({ text: "x", selections: {}, reference: { style: "s".repeat(20000), rules: "r" } });
+  assert.equal(decodeState(code).reference.style.length, MAX_REFERENCE);
 });
