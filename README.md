@@ -9,7 +9,9 @@ add your own description, and generate with OpenAI's image API.
 - **The page remembers you.** Your last keywords, text and options come back when you reopen it (localStorage).
 - **Results stay in your browser too** (IndexedDB, which has room for the images; localStorage holds about 5 MB). Use **Download** on an image, or **Copy link**: the link carries
   the keywords and text, so the other person opens the same settings and can generate them.
-- The image model defaults to `gpt-image-2.5-flare` and can be changed under Settings.
+- **Multiview** on a result image asks OpenAI's image edit for a 2 by 2 turnaround (front, back / left, right) of
+  that object, cuts it into four views and keeps them with the result, ready to download for 3D modelling.
+- The image model defaults to `gpt-image-2.5-flare` and the multiview model to `gpt-image-2.5-sunburst`; both can be changed under Settings.
 
 ## Run locally
 

@@ -1,9 +1,11 @@
 import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, cleanReference, composePrompt, encodeState, startState } from "./prompt.js";
-import { generateImages } from "./api.js";
+import { editImages, generateImages } from "./api.js";
+import { MULTIVIEW_PROMPT, MULTIVIEW_SIZE, VIEW_ORDER, splitGrid } from "./multiview.js";
 import { openHistory } from "./store.js";
 
 const DEFAULT_MODEL = "gpt-image-2.5-flare";
-const KEYS = { apiKey: "rp.apiKey", model: "rp.model", options: "rp.options.v2", form: "rp.form" };
+const DEFAULT_EDIT_MODEL = "gpt-image-2.5-sunburst"; // the tower lab's model for image edits (its multi-view grids)
+const KEYS = { apiKey: "rp.apiKey", model: "rp.model", editModel: "rp.editModel", options: "rp.options.v2", form: "rp.form" };
 const OPTION_IDS = ["size", "quality", "n", "background"];
 
 const $ = (id) => document.getElementById(id);
@@ -37,6 +39,7 @@ function writeLocal(key, value) {
 let sessionKey = ""; // used when localStorage is blocked
 const apiKey = () => readLocal(KEYS.apiKey, "") || sessionKey;
 const model = () => readLocal(KEYS.model, "") || DEFAULT_MODEL;
+const editModel = () => readLocal(KEYS.editModel, "") || DEFAULT_EDIT_MODEL;
 
 // ---------------------------------------------------------------- form
 
@@ -195,11 +198,107 @@ async function onGenerate(event) {
 
 // ---------------------------------------------------------------- results
 
-const urls = new Map(); // entry id -> object URLs
+const urls = new Map(); // "<entry id>/..." -> object URL
+
+function blobUrl(key, blob) {
+  if (!urls.has(key)) urls.set(key, URL.createObjectURL(blob));
+  return urls.get(key);
+}
+
+function forgetUrls(prefix) {
+  for (const [key, url] of urls) {
+    if (key.startsWith(prefix)) {
+      URL.revokeObjectURL(url);
+      urls.delete(key);
+    }
+  }
+}
 
 function imageUrls(entry) {
-  if (!urls.has(entry.id)) urls.set(entry.id, entry.images.map((b) => URL.createObjectURL(b)));
-  return urls.get(entry.id);
+  return entry.images.map((blob, i) => blobUrl(`${entry.id}/img/${i}`, blob));
+}
+
+// ---------------------------------------------------------------- multiview
+
+const mvJobs = new Map(); // "<entry id>/<image index>" -> { started } while running, { error } after a failure
+
+async function makeMultiview(entry, index) {
+  const key = `${entry.id}/${index}`;
+  if (mvJobs.get(key)?.started) return;
+  if (!apiKey()) {
+    openSettings();
+    setStatus("Add your OpenAI API key first.", true);
+    return;
+  }
+  mvJobs.set(key, { started: Date.now() });
+  await renderResults();
+  try {
+    const settings = { model: editModel(), size: MULTIVIEW_SIZE, quality: formOptions().quality, n: 1, background: "transparent" };
+    const [grid] = await editImages({ apiKey: apiKey(), settings, prompt: MULTIVIEW_PROMPT, images: [entry.images[index]] });
+    const views = await splitGrid(grid);
+    const latest = await store.get(entry.id); // re-read: another grid for this result may have finished meanwhile
+    mvJobs.delete(key);
+    if (latest) {
+      const mv = { id: crypto.randomUUID(), imageIndex: index, createdAt: Date.now(), settings, grid, views };
+      latest.multiviews = [...(latest.multiviews || []), mv];
+      await store.add(latest);
+      toast("Multiview ready");
+    }
+  } catch (err) {
+    mvJobs.set(key, { error: err.message });
+  }
+  await renderResults();
+}
+
+function downloadAll(files) {
+  files.forEach(([url, name], i) => setTimeout(() => el("a", { href: url, download: name }).click(), i * 250));
+}
+
+function multiviewSection(entry) {
+  const box = el("div", { className: "multiviews" });
+  entry.images.forEach((_, index) => {
+    const job = mvJobs.get(`${entry.id}/${index}`);
+    if (job && job.error) box.append(el("p", { className: "mv-error", textContent: `Multiview of image ${index + 1} failed: ${job.error}` }));
+  });
+  const list = [...(entry.multiviews || [])].sort((a, b) => b.createdAt - a.createdAt);
+  for (const mv of list) {
+    const base = `ref-${stamp(entry.createdAt)}-${mv.imageIndex + 1}`;
+    const prefix = `${entry.id}/mv/${mv.id}`;
+    const files = VIEW_ORDER.map((view) => [blobUrl(`${prefix}/${view}`, mv.views[view]), `${base}-${view}.png`]);
+    const gridUrl = blobUrl(`${prefix}/grid`, mv.grid);
+
+    const views = el("div", { className: "mv-views" });
+    VIEW_ORDER.forEach((view, i) => {
+      const [url, name] = files[i];
+      views.append(el("figure", {},
+        el("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" },
+          el("img", { src: url, alt: `${view} view`, loading: "lazy" })),
+        el("figcaption", {}, el("span", { textContent: view }),
+          el("a", { href: url, download: name, textContent: "Download" }))));
+    });
+
+    const all = el("button", { type: "button", className: "ghost small", textContent: "Download all 4" });
+    all.onclick = () => downloadAll(files);
+    const grid = el("a", { className: "button-link", href: gridUrl, download: `${base}-grid.png`, textContent: "Grid" });
+    const remove = el("button", { type: "button", className: "ghost small danger", textContent: "Remove" });
+    remove.onclick = async () => {
+      if (!window.confirm("Remove this multiview from this browser's history?")) return;
+      const latest = await store.get(entry.id);
+      if (latest) {
+        latest.multiviews = (latest.multiviews || []).filter((m) => m.id !== mv.id);
+        await store.add(latest);
+      }
+      forgetUrls(prefix);
+      await renderResults();
+    };
+    const when = new Date(mv.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    box.append(el("section", { className: "mv" },
+      el("div", { className: "mv-head" },
+        el("span", { className: "mv-title", textContent: `Multiview of image ${mv.imageIndex + 1} · ${when} · ${mv.settings.quality}` }),
+        el("div", { className: "mv-actions" }, all, grid, remove)),
+      views));
+  }
+  return box.childElementCount ? box : null;
 }
 
 function card(entry) {
@@ -207,10 +306,19 @@ function card(entry) {
   const imgs = el("div", { className: `imgs n${list.length}` });
   list.forEach((url, i) => {
     const name = `ref-${stamp(entry.createdAt)}-${i + 1}.png`;
+    const job = mvJobs.get(`${entry.id}/${i}`);
+    const mvButton = el("button", { type: "button", className: "tool", textContent: "Multiview" });
+    if (job && job.started) {
+      mvButton.disabled = true;
+      mvButton.dataset.started = String(job.started);
+      mvButton.textContent = "Making grid…";
+    }
+    mvButton.onclick = () => makeMultiview(entry, i);
     imgs.append(el("figure", {},
       el("a", { href: url, target: "_blank", rel: "noopener", title: "Open full size" },
         el("img", { src: url, alt: `Generated image ${i + 1}`, loading: "lazy" })),
-      el("a", { className: "dl", href: url, download: name, textContent: "Download" })));
+      el("div", { className: "img-tools" }, mvButton,
+        el("a", { className: "tool", href: url, download: name, textContent: "Download" }))));
   });
 
   const chips = el("div", { className: "chips" });
@@ -243,12 +351,11 @@ function card(entry) {
   del.onclick = async () => {
     if (!window.confirm("Delete these images from this browser's history?")) return;
     await store.remove(entry.id);
-    (urls.get(entry.id) || []).forEach((u) => URL.revokeObjectURL(u));
-    urls.delete(entry.id);
+    forgetUrls(`${entry.id}/`);
     await renderResults();
   };
 
-  return el("article", { className: "card" }, imgs,
+  return el("article", { className: "card" }, imgs, multiviewSection(entry),
     el("div", { className: "info" }, meta, chips, text, el("div", { className: "card-actions" }, use, link, prompt, del)));
 }
 
@@ -297,6 +404,7 @@ function resetReference() {
 function openSettings() {
   $("api-key").value = apiKey();
   $("model").value = model();
+  $("edit-model").value = editModel();
   $("settings").showModal();
 }
 
@@ -306,6 +414,8 @@ function onSettingsClose() {
   if (!writeLocal(KEYS.apiKey, key)) sessionKey = key;
   const m = $("model").value.trim();
   writeLocal(KEYS.model, m && m !== DEFAULT_MODEL ? m : "");
+  const em = $("edit-model").value.trim();
+  writeLocal(KEYS.editModel, em && em !== DEFAULT_EDIT_MODEL ? em : "");
   setStatus(key ? "" : "No API key saved.", !key);
   toast("Settings saved");
 }
@@ -331,6 +441,11 @@ async function main() {
   $("reset-reference").onclick = resetReference;
   $("reference-dialog").addEventListener("close", onReferenceEditorClose);
   $("settings").addEventListener("close", onSettingsClose);
+  setInterval(() => {
+    for (const button of document.querySelectorAll("button[data-started]")) {
+      button.textContent = `Making grid · ${Math.round((Date.now() - Number(button.dataset.started)) / 1000)} s`;
+    }
+  }, 1000);
   $("forget-key").onclick = () => {
     writeLocal(KEYS.apiKey, "");
     sessionKey = "";

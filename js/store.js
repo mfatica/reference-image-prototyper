@@ -35,6 +35,9 @@ export async function openHistory() {
       const all = db ? await run(db, "readonly", (s) => s.getAll()) : [...memory.values()];
       return all.sort((a, b) => b.createdAt - a.createdAt);
     },
+    async get(id) {
+      return db ? run(db, "readonly", (s) => s.get(id)) : memory.get(id);
+    },
     async add(entry) {
       if (db) await run(db, "readwrite", (s) => s.put(entry));
       else memory.set(entry.id, entry);
