@@ -23,19 +23,19 @@ export const MAX_TEXT = 4000;
 
 // The reference rules switch adds two blocks around the subject: STYLE before it and REFERENCE_RULES after it.
 
-export const STYLE = `Stylized dark-fantasy 3D game asset in the general style of Warcraft and Diablo, with a classic gothic fantasy feel. Chunky, readable shapes with exaggerated proportions and a strong, recognizable silhouette; compact, sturdy construction for a top-down tower defense game. Hand-painted textures: weathered dark grey graveyard stone; dark grey aged iron; bright aged brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
+export const STYLE = `Dark-fantasy 3D game asset in the general style of Warcraft and Diablo, with a classic gothic fantasy feel, made for a top-down tower defense game and with a strong, recognizable silhouette. Materials: dark grey graveyard stone; dark grey iron; brass trim along rims, bands and edges, clearly lighter than the stone. One supernatural glow: a large glowing area on an upward-facing part, painted in a single solid saturated colour, with no light spilling onto the surrounding surfaces.
 
-Show exactly one complete tower standing upright on its own small integrated stone base, with clear separation between all parts and sharp details.`;
+Show exactly one complete tower standing upright on its own small integrated stone base, with clear separation between all parts.`;
 
-export const REFERENCE_RULES = `This is a single-object modeling reference, not concept art or a scene illustration. Geometry must be physically plausible, with clearly defined solid forms and distinct components that could be reconstructed as a 3D mesh. Avoid excessive surface detail, thin floating decorations, transparent materials, particle effects, dramatic perspective, and cinematic lighting. No characters, no text, no labels, no watermarks.
+// Shape, surface detail, shading, texture, lighting, complexity, proportions and material finish are left to the
+// dropdowns, and image size and background colour to the options, so nothing here contradicts a choice.
+export const REFERENCE_RULES = `This is a single-object modeling reference, not concept art or a scene illustration. Geometry must be physically plausible, with clearly defined solid forms and distinct components that could be reconstructed as a 3D mesh. Avoid thin floating decorations and particle effects. No characters, no text, no labels, no watermarks.
 
 Image requirements (for turning the image into a 3D model):
 - One object only, shown whole and centred, with a small empty margin on every side; nothing cut off by the frame.
-- Fully transparent background, saved as a PNG. No ground, floor, shadow, scenery, text, border or watermark.
+- Plain empty background: no ground, floor, shadow, scenery, text, border or watermark.
 - Straight-on front view at eye level: the object faces the camera squarely, the camera level with its middle, not looking down from above or turned to one side. Little perspective, as if shot with a long lens.
-- Flat, even lighting: no cast shadows, no strong highlights, no rim light, no fog or glow haze around the object.
-- Glowing parts in one solid, saturated colour that appears nowhere else on the object.
-- Square image, at least 1024 x 1024 pixels.`;
+- Glowing parts in one solid, saturated colour that appears nowhere else on the object.`;
 
 export const DEFAULT_PIECES = { rules: true };
 

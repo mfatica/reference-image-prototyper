@@ -64,9 +64,29 @@ test("with the rules on, the style comes first and the rules last", () => {
   assert.ok(prompt.endsWith(REFERENCE_RULES), "rules are the last block");
 });
 
-test("the rules say it is a modeling reference on a transparent background", () => {
+test("the rules say it is a modeling reference on an empty background", () => {
   assert.match(REFERENCE_RULES, /not concept art or a scene illustration/);
-  assert.match(REFERENCE_RULES, /Fully transparent background/);
+  assert.match(REFERENCE_RULES, /Plain empty background/);
+});
+
+/** Every word or phrase a dropdown can add, e.g. "Icy / Translucent" -> ["icy", "translucent"], "Untextured (clay)" -> ["untextured", "clay"]. */
+function optionTerms() {
+  return CATEGORIES.flatMap((c) => c.options)
+    .flatMap((o) => o.toLowerCase().replace(/[()]/g, " / ").split("/"))
+    .map((t) => t.trim()).filter(Boolean);
+}
+
+test("the style and rules use none of the dropdowns' words, so they never clash", () => {
+  const text = `${STYLE}
+${REFERENCE_RULES}`.toLowerCase();
+  const clashes = optionTerms().filter((term) => new RegExp(`(^|[^a-z-])${term}([^a-z-]|$)`).test(text));
+  assert.deepEqual(clashes, []);
+});
+
+test("the style and rules leave lighting, image shape and background colour to the options", () => {
+  const text = `${STYLE}
+${REFERENCE_RULES}`;
+  for (const word of [/lighting/i, /square image/i, /1024/, /transparent/i, /shadows?,? no strong highlights/i]) assert.doesNotMatch(text, word);
 });
 
 test("the style names Warcraft and Diablo as a general style, not a single game", () => {
