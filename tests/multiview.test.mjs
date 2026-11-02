@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { MULTIVIEW_PROMPT, VIEW_ORDER, quadrants } from "../js/multiview.js";
+import { MULTIVIEW_PROMPT, VIEW_ORDER, gutterCut, viewCells, objectBox, placeViews } from "../js/multiview.js";
 import { buildEditRequest, editImages } from "../js/api.js";
 
 const settings = { model: "gpt-image-edit-test", size: "1024x1536", quality: "high", n: 1, background: "transparent" };
@@ -21,21 +21,94 @@ test("the prompt keeps the front's lighting instead of forcing its own", () => {
   assert.doesNotMatch(MULTIVIEW_PROMPT, /flat, even lighting/i);
 });
 
-test("quadrants cut an even grid into four equal cells", () => {
-  assert.deepEqual(quadrants(1024, 1536), {
-    front: { x: 0, y: 0, w: 512, h: 768 },
-    back: { x: 512, y: 0, w: 512, h: 768 },
-    left: { x: 0, y: 768, w: 512, h: 768 },
-    right: { x: 512, y: 768, w: 512, h: 768 },
-  });
+test("viewCells of a grid with no gaps cut at the halves and cover every pixel", () => {
+  const cells = viewCells(image(101, 151, [[0, 0, 101, 151]]));
+  assert.deepEqual(cells.front, { x: 0, y: 0, w: 50, h: 75 });
+  assert.equal(cells.back.x + cells.back.w, 101);
+  assert.equal(cells.right.x + cells.right.w, 101);
+  assert.equal(cells.left.y + cells.left.h, 151);
 });
 
-test("quadrants cover every pixel of an odd-sized grid", () => {
-  const q = quadrants(1023, 1535);
-  assert.equal(q.front.w + q.back.w, 1023);
-  assert.equal(q.front.h + q.left.h, 1535);
-  assert.equal(q.right.x + q.right.w, 1023);
-  assert.equal(q.right.y + q.right.h, 1535);
+/** A transparent RGBA image with opaque rectangles [x, y, w, h]. */
+function image(width, height, rects) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (const [x0, y0, w, h] of rects)
+    for (let y = y0; y < y0 + h; y++)
+      for (let x = x0; x < x0 + w; x++) data[(y * width + x) * 4 + 3] = 255;
+  return { width, height, data };
+}
+
+test("gutterCut cuts in the middle of the empty run nearest the middle", () => {
+  const counts = Array(100).fill(5);
+  counts.fill(0, 30, 35);
+  counts.fill(0, 60, 71);
+  assert.equal(gutterCut(counts), 65);
+});
+
+test("gutterCut ignores the outer margins and falls back to the middle without a gap", () => {
+  const counts = Array(100).fill(5);
+  counts.fill(0, 0, 6);
+  counts.fill(0, 94, 100);
+  assert.equal(gutterCut(counts), 50);
+});
+
+test("gutterCut ignores a gap far from the middle, such as one inside a view", () => {
+  const counts = Array(100).fill(5);
+  counts.fill(0, 10, 16);
+  assert.equal(gutterCut(counts), 50);
+});
+
+test("gutterCut sees through a stray speck in the gap", () => {
+  const counts = Array(100).fill(5);
+  counts.fill(0, 60, 71);
+  counts[64] = 1;
+  assert.equal(gutterCut(counts), 65);
+});
+
+test("viewCells cut along the gap between the rows, not at half height", () => {
+  // Top views end at y 59, bottom views start at y 70: half height (75) would cut the bottom row's tops off.
+  const img = image(100, 150, [[10, 5, 30, 55], [60, 5, 30, 55], [10, 70, 30, 70], [60, 70, 30, 70]]);
+  const cells = viewCells(img);
+  assert.equal(cells.front.y + cells.front.h, 65);
+  assert.equal(cells.left.y, 65);
+  assert.equal(cells.left.h, 85);
+});
+
+test("viewCells cut each row along its own column gap", () => {
+  const img = image(100, 150, [[5, 5, 30, 55], [45, 5, 50, 55], [5, 80, 55, 60], [70, 80, 25, 60]]);
+  const cells = viewCells(img);
+  assert.equal(cells.back.x, 40);
+  assert.equal(cells.right.x, 65);
+  assert.equal(cells.left.w, 65);
+  assert.equal(cells.right.w, 35);
+});
+
+test("objectBox is the opaque area grown by a few pixels, kept inside the cell", () => {
+  const img = image(100, 100, [[10, 20, 30, 40]]);
+  assert.deepEqual(objectBox(img, { x: 0, y: 0, w: 50, h: 50 }, 4), { x: 6, y: 16, w: 38, h: 34 });
+});
+
+test("objectBox of an empty cell is null", () => {
+  const img = image(100, 100, [[10, 20, 30, 40]]);
+  assert.equal(objectBox(img, { x: 60, y: 60, w: 40, h: 40 }), null);
+});
+
+test("placeViews puts every view on one canvas size, centred and standing on one ground line", () => {
+  const cells = { front: { w: 50, h: 70 }, back: { w: 50, h: 70 }, left: { w: 50, h: 80 }, right: { w: 50, h: 80 } };
+  const boxes = { front: { w: 20, h: 40 }, back: { w: 30, h: 40 }, left: { w: 20, h: 50 }, right: { w: 10, h: 50 } };
+  const { width, height, at } = placeViews(boxes, cells, 5);
+  assert.deepEqual([width, height], [50, 80]);
+  assert.deepEqual(at.front, { x: 15, y: 35 });
+  assert.deepEqual(at.left, { x: 15, y: 25 });
+  for (const view of VIEW_ORDER) assert.equal(at[view].y + boxes[view].h, 80 - 5, view);
+});
+
+test("placeViews grows the canvas for a view bigger than the cells, keeping one scale", () => {
+  const cells = { front: { w: 50, h: 70 }, back: { w: 50, h: 70 }, left: { w: 50, h: 70 }, right: { w: 50, h: 70 } };
+  const boxes = { front: { w: 60, h: 40 }, back: { w: 20, h: 40 }, left: { w: 20, h: 40 }, right: { w: 20, h: 40 } };
+  const { width, at } = placeViews(boxes, cells, 5);
+  assert.equal(width, 70);
+  assert.equal(at.front.x, 5);
 });
 
 test("the edit request sends the settings and the image as multipart form data", async () => {

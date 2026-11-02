@@ -1,6 +1,6 @@
 import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, cleanReference, composePrompt, encodeState, startState } from "./prompt.js";
 import { editImages, generateImages } from "./api.js";
-import { MULTIVIEW_PROMPT, MULTIVIEW_SIZE, VIEW_ORDER, splitGrid } from "./multiview.js";
+import { CUT_VERSION, MULTIVIEW_PROMPT, MULTIVIEW_SIZE, VIEW_ORDER, splitGrid } from "./multiview.js";
 import { openHistory } from "./store.js";
 
 const DEFAULT_MODEL = "gpt-image-2.5-flare";
@@ -239,7 +239,7 @@ async function makeMultiview(entry, index) {
     const latest = await store.get(entry.id); // re-read: another grid for this result may have finished meanwhile
     mvJobs.delete(key);
     if (latest) {
-      const mv = { id: crypto.randomUUID(), imageIndex: index, createdAt: Date.now(), settings, grid, views };
+      const mv = { id: crypto.randomUUID(), imageIndex: index, createdAt: Date.now(), settings, grid, views, cut: CUT_VERSION };
       latest.multiviews = [...(latest.multiviews || []), mv];
       await store.add(latest);
       toast("Multiview ready");
@@ -248,6 +248,24 @@ async function makeMultiview(entry, index) {
     mvJobs.set(key, { error: err.message });
   }
   await renderResults();
+}
+
+// Multiviews saved with an older cut (before 2026-11-02 it cut the grid at the halves) are cut again from their grid,
+// once. One that can't be cut keeps its views and isn't tried again.
+async function recutOldMultiviews() {
+  for (const entry of await store.list()) {
+    const old = (entry.multiviews || []).filter((mv) => mv.cut !== CUT_VERSION);
+    if (!old.length) continue;
+    for (const mv of old) {
+      try {
+        mv.views = await splitGrid(mv.grid);
+      } catch (err) {
+        console.warn(`Kept the old views of multiview ${mv.id}: ${err.message}`);
+      }
+      mv.cut = CUT_VERSION;
+    }
+    await store.add(entry);
+  }
 }
 
 function downloadAll(files) {
@@ -457,6 +475,11 @@ async function main() {
   $("history-note").textContent = store.persistent
     ? "Kept in this browser only. Download images or copy a link to share them."
     : "This browser blocks storage, so results disappear when you close the page. Download what you want to keep.";
+  try {
+    await recutOldMultiviews(); // before the first render, which caches each view's URL
+  } catch (err) {
+    console.warn("Could not re-cut the saved multiviews.", err);
+  }
   await renderResults();
   if (!apiKey()) setStatus("Add your OpenAI API key in Settings to start.");
 }
