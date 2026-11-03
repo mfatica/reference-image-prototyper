@@ -9,6 +9,9 @@ add your own description, and generate with OpenAI's image API.
 - **The page remembers you.** Your last keywords, text and options come back when you reopen it (localStorage).
 - **Results stay in your browser too** (IndexedDB, which has room for the images; localStorage holds about 5 MB). Use **Download** on an image, or **Copy link**: the link carries
   the keywords and text, so the other person opens the same settings and can generate them.
+- **Attached images:** add, drop or paste up to 4 images (PNG, JPEG or WebP) under the description. Generate then
+  sends them with the prompt to OpenAI's image edit (the multiview model), so the result follows their design; the
+  prompt starts with a line telling the model to follow them. They're kept with the result, not in copied links.
 - **Multiview** on a result image asks OpenAI's image edit for a 2 by 2 turnaround (front, back / left, right) of
   that object, cuts it into four views along the empty gaps between them (the model rarely centres each view in its
   half), puts them on one canvas size standing on one ground line, and keeps them with the result, ready to download

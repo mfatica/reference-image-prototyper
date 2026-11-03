@@ -28,6 +28,16 @@
         <textarea id="text" rows="4" maxlength="4000" placeholder="e.g. an ice tower: a crystal on a stone plinth, three iron claws"></textarea>
       </label>
 
+      <div class="field attach" id="attach-zone">
+        <span class="label">Attached images</span>
+        <span class="hint">Optional. Generate sends them with the prompt to OpenAI's image edit, so the result follows their design. Add, drop or paste up to 4 (PNG, JPEG or WebP). Copied links don't carry them.</span>
+        <div class="attach-row">
+          <div class="attach-list" id="attachments"></div>
+          <button type="button" class="ghost small" id="attach-add">Add image</button>
+          <input type="file" id="attach-input" accept="image/png,image/jpeg,image/webp" multiple hidden>
+        </div>
+      </div>
+
       <fieldset class="pieces">
         <legend class="label">Add to the prompt</legend>
         <label class="check"><input type="checkbox" id="piece-rules">

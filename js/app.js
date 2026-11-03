@@ -1,4 +1,4 @@
-import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, cleanReference, composePrompt, encodeState, startState } from "./prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, MAX_ATTACHMENTS, cleanReference, composePrompt, encodeState, startState } from "./prompt.js";
 import { editImages, generateImages } from "./api.js";
 import { CUT_VERSION, MULTIVIEW_PROMPT, MULTIVIEW_SIZE, VIEW_ORDER, splitGrid } from "./multiview.js";
 import { openHistory } from "./store.js";
@@ -44,6 +44,7 @@ const editModel = () => readLocal(KEYS.editModel, "") || DEFAULT_EDIT_MODEL;
 // ---------------------------------------------------------------- form
 
 let reference = null; // the edited reference prompt {style, rules}, or null for the default
+let attachments = []; // attached image blobs; kept in memory only, not in links
 
 function buildCategories() {
   const box = $("categories");
@@ -102,7 +103,7 @@ function shareUrl(state) {
 
 function onFormChange() {
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference);
+  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference, attachments.length);
   $("prompt-preview").textContent = prompt || "Pick a keyword or write a description.";
   $("prompt-preview").classList.toggle("empty", !prompt);
   if (!running) $("generate").disabled = !prompt;
@@ -159,10 +160,11 @@ async function onGenerate(event) {
     return;
   }
   const state = formState();
-  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference);
+  const inputs = [...attachments];
+  const prompt = composePrompt(state.selections, state.text, state.pieces, state.reference, inputs.length);
   if (!prompt) return;
   const options = formOptions();
-  const settings = { ...options, model: model() };
+  const settings = { ...options, model: inputs.length ? editModel() : model() };
   const controller = new AbortController();
   const started = Date.now();
   const label = `Generating ${options.n} image${options.n > 1 ? "s" : ""}`;
@@ -178,8 +180,10 @@ async function onGenerate(event) {
   $("generate").textContent = "Cancel";
   $("generate").classList.add("cancel");
   try {
-    const images = await generateImages({ apiKey: apiKey(), settings, prompt, signal: controller.signal });
-    const entry = { id: crypto.randomUUID(), createdAt: Date.now(), prompt, state, settings, images };
+    const images = inputs.length
+      ? await editImages({ apiKey: apiKey(), settings, prompt, images: inputs, signal: controller.signal })
+      : await generateImages({ apiKey: apiKey(), settings, prompt, signal: controller.signal });
+    const entry = { id: crypto.randomUUID(), createdAt: Date.now(), prompt, state, settings, images, inputs };
     await store.add(entry);
     setStatus(`Done in ${Math.round((Date.now() - started) / 1000)} s.`);
     await renderResults();
@@ -353,9 +357,15 @@ function card(entry) {
   const meta = el("p", { className: "meta",
     textContent: `${new Date(entry.createdAt).toLocaleString()} · ${s.size} · ${s.quality} · ${s.model}` });
   const text = entry.state.text.trim() ? el("p", { className: "text", textContent: entry.state.text.trim() }) : null;
+  const inputs = entry.inputs || [];
+  const attached = inputs.length
+    ? el("div", { className: "inputs" }, el("span", { textContent: inputs.length > 1 ? "From attached images" : "From an attached image" }),
+      ...inputs.map((blob, i) => el("img", { src: blobUrl(`${entry.id}/in/${i}`, blob), alt: `Attached image ${i + 1}` })))
+    : null;
 
   const use = el("button", { type: "button", className: "ghost", textContent: "Use these settings" });
   use.onclick = () => {
+    setAttachments(inputs);
     applyState(entry.state);
     applyOptions(s);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -374,7 +384,7 @@ function card(entry) {
   };
 
   return el("article", { className: "card" }, imgs, multiviewSection(entry),
-    el("div", { className: "info" }, meta, chips, text, el("div", { className: "card-actions" }, use, link, prompt, del)));
+    el("div", { className: "info" }, meta, chips, text, attached, el("div", { className: "card-actions" }, use, link, prompt, del)));
 }
 
 async function renderResults() {
@@ -385,6 +395,70 @@ async function renderResults() {
   if (!entries.length && !pending) {
     box.append(el("p", { className: "empty", textContent: "Nothing yet. Generated images appear here and stay in this browser." }));
   }
+}
+
+// ---------------------------------------------------------------- attached images
+
+const ATTACH_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const attachUrls = new Map(); // blob -> object URL for the form's thumbnails
+
+function setAttachments(list) {
+  for (const [blob, url] of attachUrls) {
+    if (!list.includes(blob)) {
+      URL.revokeObjectURL(url);
+      attachUrls.delete(blob);
+    }
+  }
+  attachments = list.slice(0, MAX_ATTACHMENTS);
+  const box = $("attachments");
+  box.replaceChildren(...attachments.map((blob, i) => {
+    if (!attachUrls.has(blob)) attachUrls.set(blob, URL.createObjectURL(blob));
+    const remove = el("button", { type: "button", textContent: "×", title: "Remove" });
+    remove.setAttribute("aria-label", `Remove attached image ${i + 1}`);
+    remove.onclick = () => {
+      setAttachments(attachments.filter((b) => b !== blob));
+      onFormChange();
+    };
+    return el("div", { className: "attach-item" }, el("img", { src: attachUrls.get(blob), alt: `Attached image ${i + 1}` }), remove);
+  }));
+  $("attach-add").disabled = attachments.length >= MAX_ATTACHMENTS;
+}
+
+function addAttachments(files) {
+  const images = [...files].filter((f) => ATTACH_TYPES.includes(f.type));
+  if (!images.length) {
+    if (files.length) toast("Only PNG, JPEG or WebP images can be attached");
+    return;
+  }
+  const room = Math.max(MAX_ATTACHMENTS - attachments.length, 0);
+  if (images.length > room) toast(`Up to ${MAX_ATTACHMENTS} images: ${room} added`);
+  setAttachments([...attachments, ...images.slice(0, room)]);
+  onFormChange();
+}
+
+function wireAttachments() {
+  const zone = $("attach-zone");
+  $("attach-add").onclick = () => $("attach-input").click();
+  $("attach-input").addEventListener("change", (e) => {
+    addAttachments(e.target.files);
+    e.target.value = "";
+  });
+  zone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    zone.classList.add("dragging");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("dragging"));
+  zone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragging");
+    addAttachments(e.dataTransfer.files);
+  });
+  document.addEventListener("paste", (e) => {
+    const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => ATTACH_TYPES.includes(f.type));
+    if (!files.length) return;
+    e.preventDefault();
+    addAttachments(files);
+  });
 }
 
 // ---------------------------------------------------------------- reference prompt
@@ -442,6 +516,7 @@ function onSettingsClose() {
 
 async function main() {
   buildCategories();
+  wireAttachments();
   try {
     applyOptions(JSON.parse(readLocal(KEYS.options, "{}")));
   } catch {
@@ -452,7 +527,10 @@ async function main() {
   $("form").addEventListener("input", onFormChange);
   $("form").addEventListener("change", () => writeLocal(KEYS.options, JSON.stringify(formOptions())));
   $("form").addEventListener("submit", onGenerate);
-  $("reset").onclick = () => applyState({ text: "", selections: {}, pieces: DEFAULT_PIECES });
+  $("reset").onclick = () => {
+    setAttachments([]);
+    applyState({ text: "", selections: {}, pieces: DEFAULT_PIECES });
+  };
   $("copy-link").onclick = () => copy(shareUrl(formState()), "Link");
   $("open-settings").onclick = openSettings;
   $("edit-reference").onclick = openReferenceEditor;

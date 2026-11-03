@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildRequest, generateImages } from "../js/api.js";
+import { buildEditRequest, buildRequest, generateImages } from "../js/api.js";
 
 const settings = { model: "gpt-image-test", size: "1024x1024", quality: "high", n: 2, background: "auto" };
 
@@ -42,4 +42,14 @@ test("an error without a JSON body still names the status", async (t) => {
 test("a reply without images is an error", async (t) => {
   t.mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ data: [] }), { status: 200 }));
   await assert.rejects(generateImages({ apiKey: "sk-test", settings, prompt: "x" }), /no images/);
+});
+
+test("an edit request sends every image with a file name matching its type", async () => {
+  const images = [new Blob(["a"], { type: "image/png" }), new Blob(["b"], { type: "image/jpeg" }), new Blob(["c"], { type: "image/webp" })];
+  const { url, init } = buildEditRequest("sk-test", settings, "follow it", images);
+  assert.equal(url, "https://api.openai.com/v1/images/edits");
+  const files = init.body.getAll("image[]");
+  assert.deepEqual(files.map((f) => f.name), ["image-1.png", "image-2.jpg", "image-3.webp"]);
+  assert.equal(init.body.get("prompt"), "follow it");
+  assert.equal(init.headers["Content-Type"], undefined);
 });

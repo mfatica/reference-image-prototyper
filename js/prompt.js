@@ -55,19 +55,29 @@ function cleanSelections(selections) {
   return clean;
 }
 
+/** The line that tells the model to follow the attached images (sent to image edit with the prompt). */
+export function attachedNote(count) {
+  return count > 1
+    ? "Follow the attached images for the object's design: keep its shapes, parts, layout and materials, and draw it as described below."
+    : "Follow the attached image for the object's design: keep its shapes, parts, layout and materials, and draw it as described below.";
+}
+
+export const MAX_ATTACHMENTS = 4;
+
 /**
- * The prompt: [style] [subject] [keywords] [rules], blocks separated by a blank line; style and rules only with the
- * rules switch on, and then the text is labelled "Subject:". `reference` is an edited {style, rules}, or null for the
- * defaults; an emptied part is left out.
- * Empty when there is neither text nor a keyword: the rules alone describe nothing.
+ * The prompt: [attached note] [style] [subject] [keywords] [rules], blocks separated by a blank line; style and rules
+ * only with the rules switch on, and then the text is labelled "Subject:". `reference` is an edited {style, rules}, or
+ * null for the defaults; an emptied part is left out. `attachments` is the number of attached images.
+ * Empty when there is no text, keyword or attached image: the rules alone describe nothing.
  */
-export function composePrompt(selections, text, pieces = {}, reference = null) {
+export function composePrompt(selections, text, pieces = {}, reference = null, attachments = 0) {
   const clean = cleanSelections(selections);
   const lines = CATEGORIES.filter((c) => clean[c.id]).map((c) => `${c.label}: ${clean[c.id].toLowerCase()}.`);
   const body = (text || "").trim();
-  if (!body && !lines.length) return "";
+  if (!body && !lines.length && !attachments) return "";
   const { style, rules } = reference || DEFAULT_REFERENCE;
   const parts = [];
+  if (attachments) parts.push(attachedNote(attachments));
   if (pieces.rules && style.trim()) parts.push(style.trim());
   if (body) parts.push(pieces.rules ? `Subject: ${body}` : body);
   if (lines.length) parts.push(lines.join("\n"));

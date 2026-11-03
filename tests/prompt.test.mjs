@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, MAX_REFERENCE, REFERENCE_RULES, STYLE, composePrompt, encodeState, decodeState, startState } from "../js/prompt.js";
+import { CATEGORIES, DEFAULT_PIECES, DEFAULT_REFERENCE, MAX_REFERENCE, REFERENCE_RULES, STYLE, attachedNote, composePrompt, encodeState, decodeState, startState } from "../js/prompt.js";
 
 test("there are eight categories with eight options each", () => {
   assert.equal(CATEGORIES.length, 8);
@@ -179,4 +179,26 @@ test("decoding caps a very long reference prompt", () => {
 
 test("the style leaves the materials to the subject and keywords", () => {
   assert.doesNotMatch(STYLE, /Materials:|iron|brass|graveyard stone/i);
+});
+
+// ---------------------------------------------------------------- attached images
+
+test("an attached image alone makes a prompt, with the rules around it", () => {
+  const prompt = composePrompt({}, "", { rules: true }, null, 1);
+  assert.equal(prompt, `${attachedNote(1)}\n\n${STYLE}\n\n${REFERENCE_RULES}`);
+});
+
+test("the attached note comes first, before the subject", () => {
+  const prompt = composePrompt({}, "a blade mill", { rules: false }, null, 1);
+  assert.equal(prompt, `${attachedNote(1)}\n\na blade mill`);
+});
+
+test("the note speaks of images when more than one is attached", () => {
+  assert.match(attachedNote(2), /attached images/);
+  assert.match(attachedNote(1), /attached image for/);
+});
+
+test("without attachments the prompt is unchanged", () => {
+  assert.equal(composePrompt({}, "an ice tower", {}, null, 0), "an ice tower");
+  assert.equal(composePrompt({}, "", { rules: true }, null, 0), "");
 });

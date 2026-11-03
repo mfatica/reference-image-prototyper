@@ -23,6 +23,11 @@ export function buildRequest(apiKey, settings, prompt) {
   };
 }
 
+/** The file extension OpenAI expects for an image's type (it accepts PNG, JPEG and WebP). */
+export function imageExtension(type) {
+  return { "image/jpeg": "jpg", "image/webp": "webp" }[type] || "png";
+}
+
 /** Multipart form for /images/edits; no Content-Type header, so fetch adds the boundary. */
 export function buildEditRequest(apiKey, settings, prompt, images) {
   const form = new FormData();
@@ -33,7 +38,7 @@ export function buildEditRequest(apiKey, settings, prompt, images) {
   form.append("n", String(settings.n));
   form.append("background", settings.background);
   form.append("output_format", "png");
-  images.forEach((blob, i) => form.append("image[]", blob, `image-${i + 1}.png`));
+  images.forEach((blob, i) => form.append("image[]", blob, `image-${i + 1}.${imageExtension(blob.type)}`));
   return { url: EDIT_ENDPOINT, init: { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form } };
 }
 
